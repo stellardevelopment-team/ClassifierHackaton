@@ -1,66 +1,189 @@
 <!DOCTYPE html>
-<html lang="it">
-<head>
-  <meta charset="UTF-8">
-  <title>hackaton app</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      background-color: #f4f4f4;
-    }
-    video {
-      width: 100%;
-      max-width: 500px;
-      border-radius: 10px;
-    }
-    #label-container {
-      margin-top: 20px;
-      font-size: 1.5em;
-    }
-  </style>
-</head>
-<body>
-  <h1>Classifier Webcam</h1>
-  <video id="webcam" autoplay playsinline muted></video>
-  <div id="label-container"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
-  <script type="text/javascript">
+<html lang="it">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <title>classifier embed</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+
+  <style>
+
+    body {
+
+      margin: 0;
+
+      display: flex;
+
+      flex-direction: column;
+
+      align-items: center;
+
+      justify-content: center;
+
+      height: 100vh;
+
+      background: #fff;
+
+      color: #000;
+
+      font-family: sans-serif;
+
+    }
+
+    #webcam-container {
+
+      width: 400px;
+
+      height: 400px;
+
+      overflow: hidden;
+
+      border-radius: 8px;
+
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+
+    }
+
+    #label-container {
+
+      margin-top: 12px;
+
+      font-size: 1.25em;
+
+      font-weight: bold;
+
+    }
+
+  </style>
+
+
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0/dist/tf.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>  
+
+</head>
+
+<body>
+
+
+
+  <div id="webcam-container"></div>
+
+  <div id="label-container">Caricamento modello…</div>
+
+
+
+  <script>
+
     const URL = "https://teachablemachine.withgoogle.com/models/Z4hNMgDAx/";
-    let model, webcam, labelContainer, maxPredictions;
+
+    let model, webcam, labelContainer;
+
+
+
+    function isMobile() {
+
+      return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    }
+
+
 
     async function init() {
-      const modelURL = URL + "model.json";
-      const metadataURL = URL + "metadata.json";
 
-      model = await tmImage.load(modelURL, metadataURL);
-      maxPredictions = model.getTotalClasses();
+      // fai partire il modello
 
-      webcam = new tmImage.Webcam(400, 400, true); // width, height, flip
-      await webcam.setup();
+      model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+
+
+
+      // se è un telefono usa la fotocamera posteriore
+
+      const flip = !isMobile();  
+
+      const constraints = isMobile()
+
+        ? { facingMode: "environment" }
+
+        : undefined;
+
+
+
+      webcam = new tmImage.Webcam(400, 400, flip);
+
+      await webcam.setup(constraints ? { facingMode: constraints.facingMode } : {});  
+
       await webcam.play();
+
+      document.getElementById("webcam-container").appendChild(webcam.canvas);
+
+
+
+      labelContainer = document.getElementById("label-container");
+
       window.requestAnimationFrame(loop);
 
-      document.getElementById("webcam").appendChild(webcam.canvas);
-      labelContainer = document.getElementById("label-container");
     }
+
+
 
     async function loop() {
+
       webcam.update();
-      await predict();
+
+      const predictions = await model.predict(webcam.canvas);
+
+      predictions.sort((a, b) => b.probability - a.probability);
+
+      const top = predictions[0];
+
+      const p = top.probability;
+
+      let text;
+
+      if (p < 0.6) {
+
+        text = "INCERTO";
+
+      } else {
+
+        switch (top.className.toLowerCase()) {
+
+          case "metal":   text = "METALLO"; break;
+
+          case "plastic": text = "PLASTICA"; break;
+
+          case "paper":   text = "CARTA";   break;
+
+          default:        text = top.className.toUpperCase();
+
+        }
+
+      }
+
+      labelContainer.innerText = `${text} (${(p * 100).toFixed(1)}%)`;
+
       window.requestAnimationFrame(loop);
+
     }
 
-    async function predict() {
-      const prediction = await model.predict(webcam.canvas);
-      let result = "";
-      prediction.sort((a, b) => b.probability - a.probability);
-      result = `${prediction[0].className} (${(prediction[0].probability * 100).toFixed(1)}%)`;
-      labelContainer.innerText = result;
-    }
 
-    init();
+
+    init().catch(err => {
+
+      console.error("Errore init:", err);
+
+      labelContainer.innerText = "Errore caricamento";
+
+    });
+
   </script>
+
 </body>
+
 </html>
