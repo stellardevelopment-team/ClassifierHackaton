@@ -1,189 +1,174 @@
 <!DOCTYPE html>
-
 <html lang="it">
-
 <head>
-
   <meta charset="UTF-8">
-
-  <title>classifier embed</title>
-
+  <title>Classifier Embed</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">  
-
   <style>
-
     body {
-
       margin: 0;
-
-      display: flex;
-
-      flex-direction: column;
-
-      align-items: center;
-
-      justify-content: center;
-
-      height: 100vh;
-
-      background: #fff;
-
-      color: #000;
-
+      padding: 20px;
       font-family: sans-serif;
+      background: #fff;
+      color: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
 
+    #user-id {
+      margin-bottom: 16px;
+      font-size: 1.1em;
     }
 
     #webcam-container {
-
       width: 400px;
-
       height: 400px;
-
       overflow: hidden;
-
       border-radius: 8px;
-
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
-
     }
 
     #label-container {
-
-      margin-top: 12px;
-
+      margin-top: 16px;
       font-size: 1.25em;
-
       font-weight: bold;
-
     }
 
+    #scatta-button {
+      margin-top: 16px;
+      padding: 10px 20px;
+      font-size: 1em;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #scatta-button:hover {
+      background-color: #1e7e34;
+    }
+
+    #stats-result {
+      margin-top: 16px;
+      font-size: 1em;
+      color: #333;
+    }
   </style>
 
-
-
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0/dist/tf.min.js"></script>
-
   <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>  
-
 </head>
 
 <body>
 
-
-
+  <div id="user-id">ID: ...</div>
   <div id="webcam-container"></div>
-
-  <div id="label-container">Caricamento modello…</div>
-
-
+  <button id="scatta-button">Scatta</button>
+  <div id="label-container"></div>
+  <div id="stats-result"></div>
 
   <script>
-
     const URL = "https://teachablemachine.withgoogle.com/models/Z4hNMgDAx/";
+    let model, webcam;
 
-    let model, webcam, labelContainer;
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("id");
 
+    const userIdElement = document.getElementById("user-id");
+    userIdElement.innerText = userId ? `ID: ${userId}` : "ID non fornito";
 
+    const labelContainer = document.getElementById("label-container");
+    const statsResult = document.getElementById("stats-result");
+    const apiUrl = "https://login-api-aysl.onrender.com/update_stats";
 
     function isMobile() {
-
       return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
     }
-
-
 
     async function init() {
-
-      // fai partire il modello
-
       model = await tmImage.load(URL + "model.json", URL + "metadata.json");
 
-
-
-      // se è un telefono usa la fotocamera posteriore
-
       const flip = !isMobile();  
-
-      const constraints = isMobile()
-
-        ? { facingMode: "environment" }
-
-        : undefined;
-
-
+      const constraints = isMobile() ? { facingMode: "environment" } : undefined;
 
       webcam = new tmImage.Webcam(400, 400, flip);
-
-      await webcam.setup(constraints ? { facingMode: constraints.facingMode } : {});  
-
+      await webcam.setup(constraints ? { facingMode: constraints.facingMode } : {});
       await webcam.play();
-
       document.getElementById("webcam-container").appendChild(webcam.canvas);
-
-
-
-      labelContainer = document.getElementById("label-container");
-
+      
+      // Aggiungi loop per aggiornare continuamente la webcam
       window.requestAnimationFrame(loop);
-
     }
-
-
 
     async function loop() {
-
-      webcam.update();
-
-      const predictions = await model.predict(webcam.canvas);
-
-      predictions.sort((a, b) => b.probability - a.probability);
-
-      const top = predictions[0];
-
-      const p = top.probability;
-
-      let text;
-
-      if (p < 0.6) {
-
-        text = "INCERTO";
-
-      } else {
-
-        switch (top.className.toLowerCase()) {
-
-          case "metal":   text = "METALLO"; break;
-
-          case "plastic": text = "PLASTICA"; break;
-
-          case "paper":   text = "CARTA";   break;
-
-          default:        text = top.className.toUpperCase();
-
-        }
-
-      }
-
-      labelContainer.innerText = `${text} (${(p * 100).toFixed(1)}%)`;
-
+      webcam.update(); // Aggiorna il frame della webcam
       window.requestAnimationFrame(loop);
-
     }
 
+    document.getElementById("scatta-button").addEventListener("click", async () => {
+      if (!userId) {
+        alert("ID non presente nell'URL!");
+        return;
+      }
 
+      try {
+        const predictions = await model.predict(webcam.canvas);
+        predictions.sort((a, b) => b.probability - a.probability);
+        const top = predictions[0];
+        const confidence = top.probability;
 
-    init().catch(err => {
+        let categoria;
+        if (confidence < 0.6) {
+          categoria = "INCERTO";
+        } else {
+          switch (top.className.toLowerCase()) {
+            case "metal":   categoria = "metallo"; break;
+            case "plastic": categoria = "plastica"; break;
+            case "paper":   categoria = "carta"; break;
+            default:        categoria = top.className.toLowerCase();
+          }
+        }
 
-      console.error("Errore init:", err);
+        labelContainer.innerText = `Riconosciuto: ${categoria.toUpperCase()} (${(confidence * 100).toFixed(1)}%)`;
 
-      labelContainer.innerText = "Errore caricamento";
+        if (["plastica", "carta", "metallo"].includes(categoria)) {
+          const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              id: userId,
+              categoria: categoria
+            })
+          });
 
+          const data = await response.json();
+          if (data.statistiche) {
+            let statText = "Statistiche aggiornate:\n";
+            for (const [k, v] of Object.entries(data.statistiche)) {
+              statText += `- ${k}: ${v}\n`;
+            }
+            statsResult.innerText = statText;
+          } else {
+            statsResult.innerText = "Statistiche non disponibili.";
+          }
+        } else {
+          statsResult.innerText = "Nessun invio: categoria incerta.";
+        }
+
+      } catch (err) {
+        console.error("Errore:", err);
+        alert("Errore durante l'elaborazione.");
+      }
     });
 
+    init().catch(err => {
+      console.error("Errore init:", err);
+      labelContainer.innerText = "Errore caricamento modello";
+    });
   </script>
-
 </body>
-
 </html>
