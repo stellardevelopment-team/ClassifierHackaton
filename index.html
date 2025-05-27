@@ -133,7 +133,7 @@
 
         labelContainer.innerText = `Riconosciuto: ${categoria.toUpperCase()} (${(confidence * 100).toFixed(1)}%)`;
 
-        if (["plastica", "carta", "metallo"].includes(categoria)) {
+        if (["plastica", "carta", "metallo", "vetro", "raee"].includes(categoria)) {
           const response = await fetch(apiUrl, {
             method: "POST",
             headers: {
