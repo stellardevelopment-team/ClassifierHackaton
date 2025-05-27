@@ -120,7 +120,7 @@
         const confidence = top.probability;
 
         let categoria;
-        if (confidence < 0.8) {
+        if (confidence < 0.99) {
           categoria = "INCERTO";
         } else {
           switch (top.className.toLowerCase()) {
