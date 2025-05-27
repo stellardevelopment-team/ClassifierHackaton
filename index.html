@@ -16,11 +16,6 @@
       align-items: center;
     }
 
-    #user-id {
-      margin-bottom: 16px;
-      font-size: 1.1em;
-    }
-
     #webcam-container {
       width: 400px;
       height: 400px;
@@ -49,12 +44,6 @@
     #scatta-button:hover {
       background-color: #1e7e34;
     }
-
-    #stats-result {
-      margin-top: 16px;
-      font-size: 1em;
-      color: #333;
-    }
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0/dist/tf.min.js"></script>
@@ -63,25 +52,13 @@
 
 <body>
 
-  <div id="user-id">ID: ...</div>
   <div id="webcam-container"></div>
   <button id="scatta-button">Scatta</button>
   <div id="label-container"></div>
-  <div id="stats-result"></div>
 
   <script>
     const URL = "https://teachablemachine.withgoogle.com/models/rgrGlh6ri/";
     let model, webcam;
-
-    const params = new URLSearchParams(window.location.search);
-    const userId = params.get("id");
-
-    const userIdElement = document.getElementById("user-id");
-    userIdElement.innerText = userId ? `ID: ${userId}` : "ID non fornito";
-
-    const labelContainer = document.getElementById("label-container");
-    const statsResult = document.getElementById("stats-result");
-    const apiUrl = "https://login-api-aysl.onrender.com/update_stats";
 
     function isMobile() {
       return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -98,21 +75,15 @@
       await webcam.play();
       document.getElementById("webcam-container").appendChild(webcam.canvas);
       
-      // Aggiungi loop per aggiornare continuamente la webcam
       window.requestAnimationFrame(loop);
     }
 
     async function loop() {
-      webcam.update(); // Aggiorna il frame della webcam
+      webcam.update();
       window.requestAnimationFrame(loop);
     }
 
     document.getElementById("scatta-button").addEventListener("click", async () => {
-      if (!userId) {
-        alert("ID non presente nell'URL!");
-        return;
-      }
-
       try {
         const predictions = await model.predict(webcam.canvas);
         predictions.sort((a, b) => b.probability - a.probability);
@@ -127,38 +98,15 @@
             case "metal":   categoria = "metallo"; break;
             case "plastic": categoria = "plastica"; break;
             case "paper":   categoria = "carta"; break;
-            case "raee":   categoria = "raee"; break;
+            case "raee":    categoria = "raee"; break;
             default:        categoria = top.className.toLowerCase();
           }
         }
 
-        labelContainer.innerText = `Riconosciuto: ${categoria.toUpperCase()} (${(confidence * 100).toFixed(1)}%)`;
-
-        if (["plastica", "carta", "metallo", "vetro", "raee"].includes(categoria)) {
-          const response = await fetch(apiUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              id: userId,
-              categoria: categoria
-            })
-          });
-
-          const data = await response.json();
-          if (data.statistiche) {
-            let statText = "Statistiche aggiornate:\n";
-            for (const [k, v] of Object.entries(data.statistiche)) {
-              statText += `- ${k}: ${v}\n`;
-            }
-            statsResult.innerText = statText;
-          } else {
-            statsResult.innerText = "Statistiche non disponibili.";
-          }
-        } else {
-          statsResult.innerText = "Nessun invio: categoria incerta.";
-        }
+        const labelContainer = document.getElementById("label-container");
+        labelContainer.innerText = categoria === "INCERTO"
+          ? "Riconoscimento non riuscito"
+          : `Rifiuto riconosciuto: ${categoria.toUpperCase()}`;
 
       } catch (err) {
         console.error("Errore:", err);
@@ -168,7 +116,7 @@
 
     init().catch(err => {
       console.error("Errore init:", err);
-      labelContainer.innerText = "Errore caricamento modello";
+      document.getElementById("label-container").innerText = "Errore caricamento modello";
     });
   </script>
 </body>
